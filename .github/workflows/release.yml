@@ -43,11 +43,7 @@ jobs:
           override: true
       
       - name: Build Binary
-        working-directory: clients/cli
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }}
           
       - name: Prepare artifacts
         shell: bash
@@ -64,7 +60,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: network-cli-${{ matrix.target }}
-          path: network-cli-${{ matrix.target }}.*
+          path: clients/cli/network-cli-${{ matrix.target }}.*
           
   release:
     needs: build
