@@ -35,6 +35,17 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
+      - name: Install dependencies (Ubuntu)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev
+          
+      - name: Install dependencies (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          brew install openssl@3
+          
       - name: Setup Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -42,7 +53,17 @@ jobs:
           target: ${{ matrix.target }}
           override: true
       
+      # Install cross-compilation tools
+      - name: Install cross-compilation tools
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          
       - name: Build Binary
+        env:
+          OPENSSL_DIR: ${{ startsWith(matrix.os, 'macos') && '/usr/local/opt/openssl@3' || '/usr' }}
+          PKG_CONFIG_ALLOW_CROSS: "1"
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
         run: cargo build --release --target ${{ matrix.target }}
           
       - name: Prepare artifacts
