@@ -7,104 +7,36 @@ on:
 
 jobs:
   build:
-    name: Build ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: clients/cli
-    strategy:
-      matrix:
-        include:
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            binary_name: network-cli
-            arch: x86
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            binary_name: network-cli
-            arch: arm64
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            binary_name: network-cli
-            arch: x86
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            binary_name: network-cli
-            arch: arm64
-
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Install dependencies (Ubuntu)
-        if: startsWith(matrix.os, 'ubuntu')
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libssl-dev
-          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
-            sudo dpkg --add-architecture arm64
-            sudo apt-get update
-            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-            sudo apt-get install -y libssl-dev:arm64
-          fi
-          
-      - name: Install dependencies (macOS)
-        if: startsWith(matrix.os, 'macos')
-        run: |
-          brew install openssl@3
-          
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
-      
-      - name: Build Binary
-        env:
-          OPENSSL_DIR: ${{ startsWith(matrix.os, 'macos') && '/usr/local/opt/openssl@3' || '/usr' }}
-          PKG_CONFIG_ALLOW_CROSS: "1"
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
-          # Add pkg-config settings for cross compilation
-          PKG_CONFIG_SYSROOT_DIR: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && '/usr/aarch64-linux-gnu' || '' }}
-          PKG_CONFIG_PATH: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && '/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig' || '' }}
-        run: |
-          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
-            export OPENSSL_LIB_DIR=/usr/lib/aarch64-linux-gnu
-            export OPENSSL_INCLUDE_DIR=/usr/include/aarch64-linux-gnu
-          fi
-          cargo build --release --target ${{ matrix.target }}
-          
-      - name: Prepare artifacts
-        shell: bash
-        run: |
-          cd ../../target/${{ matrix.target }}/release
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            7z a ../../../network-cli-${{ matrix.target }}.zip ${{ matrix.binary_name }}.exe
-          else
-            tar czvf ../../../network-cli-${{ matrix.target }}.tar.gz ${{ matrix.binary_name }}
-          fi
-          cd -
-          
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: network-cli-${{ matrix.target }}
-          path: clients/cli/network-cli-${{ matrix.target }}.*
-          
-  release:
-    needs: build
+    permissions:
+      id-token: write
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       
-      - name: Download artifacts
-        uses: actions/download-artifact@v3
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          targets: |
+            x86_64-unknown-linux-gnu
+            aarch64-unknown-linux-gnu
+            x86_64-apple-darwin
+            aarch64-apple-darwin
+
+      - name: Build project
+        working-directory: clients/cli
+        run: cargo build --release
         
+      - name: Fix build if failed
+        uses: fly-ci/wingman-action@v1
+        if: failure()
+      
       - name: Create Release
-        id: create_release
         uses: softprops/action-gh-release@v1
         with:
-          files: network-cli-*/network-cli-*
+          files: clients/cli/target/release/network-cli*
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
