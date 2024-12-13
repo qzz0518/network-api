@@ -1,0 +1,81 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            binary_name: network-cli
+            arch: x86
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            binary_name: network-cli
+            arch: arm64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary_name: network-cli
+            arch: x86
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            binary_name: network-cli
+            arch: arm64
+
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+      
+      - name: Build Binary
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target ${{ matrix.target }}
+          
+      - name: Prepare artifacts
+        shell: bash
+        run: |
+          cd target/${{ matrix.target }}/release
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            7z a ../../../network-cli-${{ matrix.target }}.zip ${{ matrix.binary_name }}.exe
+          else
+            tar czvf ../../../network-cli-${{ matrix.target }}.tar.gz ${{ matrix.binary_name }}
+          fi
+          cd -
+          
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: network-cli-${{ matrix.target }}
+          path: network-cli-${{ matrix.target }}.*
+          
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: network-cli-*/network-cli-*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
