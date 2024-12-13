@@ -40,6 +40,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libssl-dev
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            sudo dpkg --add-architecture arm64
+            sudo apt-get update
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+            sudo apt-get install -y libssl-dev:arm64
+          fi
           
       - name: Install dependencies (macOS)
         if: startsWith(matrix.os, 'macos')
@@ -53,18 +59,20 @@ jobs:
           target: ${{ matrix.target }}
           override: true
       
-      # Install cross-compilation tools
-      - name: Install cross-compilation tools
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-          
       - name: Build Binary
         env:
           OPENSSL_DIR: ${{ startsWith(matrix.os, 'macos') && '/usr/local/opt/openssl@3' || '/usr' }}
           PKG_CONFIG_ALLOW_CROSS: "1"
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
-        run: cargo build --release --target ${{ matrix.target }}
+          # Add pkg-config settings for cross compilation
+          PKG_CONFIG_SYSROOT_DIR: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && '/usr/aarch64-linux-gnu' || '' }}
+          PKG_CONFIG_PATH: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && '/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig' || '' }}
+        run: |
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            export OPENSSL_LIB_DIR=/usr/lib/aarch64-linux-gnu
+            export OPENSSL_INCLUDE_DIR=/usr/include/aarch64-linux-gnu
+          fi
+          cargo build --release --target ${{ matrix.target }}
           
       - name: Prepare artifacts
         shell: bash
