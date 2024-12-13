@@ -9,6 +9,9 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: clients/cli
     strategy:
       matrix:
         include:
@@ -40,6 +43,7 @@ jobs:
           override: true
       
       - name: Build Binary
+        working-directory: clients/cli
         uses: actions-rs/cargo@v1
         with:
           command: build
@@ -48,7 +52,7 @@ jobs:
       - name: Prepare artifacts
         shell: bash
         run: |
-          cd target/${{ matrix.target }}/release
+          cd ../../target/${{ matrix.target }}/release
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
             7z a ../../../network-cli-${{ matrix.target }}.zip ${{ matrix.binary_name }}.exe
           else
